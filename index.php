@@ -1,6 +1,5 @@
 <?php
 
-// ===== BASIC SETUP =====
 error_reporting(0);
 ini_set('display_errors', 0);
 
@@ -12,7 +11,6 @@ if($_SERVER['REQUEST_METHOD'] === 'OPTIONS'){
     exit;
 }
 
-// ===== VERIFY ROUTE =====
 if(
     $_SERVER['REQUEST_METHOD'] === 'POST' &&
     strpos($_SERVER['REQUEST_URI'], 'verify') !== false
@@ -35,18 +33,14 @@ if(
         exit;
     }
 
-    // 🔒 Check device
+    // DB call (no function redeclare)
     $check = db("users?device_id=eq.$device");
 
     if($check && count($check) > 0){
-        echo json_encode([
-            "status"=>"error",
-            "msg"=>"Device already used"
-        ]);
+        echo json_encode(["status"=>"error","msg"=>"Device already used"]);
         exit;
     }
 
-    // ✅ Verify user
     db("users?telegram_id=eq.$user","PATCH",[
         "verified"=>true,
         "device_id"=>$device
@@ -56,11 +50,17 @@ if(
     exit;
 }
 
-// ===== TELEGRAM UPDATE HANDLER =====
-$update = json_decode(file_get_contents("php://input"), true);
+$update_raw = file_get_contents("php://input");
 
+if(!$update_raw){
+    // If not Telegram request → just stop
+    exit;
+}
+
+$update = json_decode($update_raw, true);
+
+// VERY IMPORTANT
 if(!$update){
-    // Not a Telegram request → just exit
     exit;
 }
 
