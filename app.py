@@ -93,31 +93,33 @@ def bot():
 
     # ---------------- START ----------------
     if text.startswith("/start"):
-        ref = None
-        if " " in text:
-            ref = text.split()[1]
+    ref = None
 
-        if ref and str(ref) != str(user_id):
-            sb("users", "patch", {"referrer_id": int(ref)}, f"?user_id=eq.{user_id}")
+    if " " in text:
+        ref = text.split()[1]
 
-        if not check_join(user_id):
-            keyboard = {
-                "inline_keyboard": [
-                    [{"text": "Join Channel 1", "url": "https://t.me/ZenithWave_Shein"}],
-                    [{"text": "Join Channel 2", "url": "https://t.me/ZenithWaveLoots"}],
-                    [{"text": "Join Channel 3", "url": "https://t.me/ZenithWave_Shein_Backup"}]
-                ]
-            }
-            send(user_id, "Join all channels first then press /start again", keyboard)
-            return "ok"
+    if ref and str(ref) != str(user_id):
+        sb("users", "patch", {"referrer_id": int(ref)}, f"?user_id=eq.{user_id}")
 
-   keyboard = {
-       "inline_keyboard": [
-           [{"text": "🌐 Verify Now", "url": f"{BASE_URL}/verify?uid={user_id}"}],
-           [{"text": "✅ Check Verification", "callback_data": "check_verify"}]
-       ]
-   }
-        send(user_id, "Complete verification", keyboard)
+    if not check_join(user_id):
+        keyboard = {
+            "inline_keyboard": [
+                [{"text": "Join Channel 1", "url": "https://t.me/channel1"}],
+                [{"text": "Join Channel 2", "url": "https://t.me/channel2"}],
+                [{"text": "Join Channel 3", "url": "https://t.me/channel3"}]
+            ]
+        }
+        send(user_id, "Join all channels first", keyboard)
+        return "ok"
+
+    keyboard = {
+        "inline_keyboard": [
+            [{"text": "🌐 Verify Now", "url": f"{BASE_URL}/verify?uid={user_id}"}],
+            [{"text": "✅ Check Verification", "callback_data": "check_verify"}]
+        ]
+    }
+
+    send(user_id, "Complete verification", keyboard)
 
 if "callback_query" in data:
     cq = data["callback_query"]
