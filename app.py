@@ -111,12 +111,34 @@ def bot():
             send(user_id, "Join all channels first then press /start again", keyboard)
             return "ok"
 
-        keyboard = {
-            "inline_keyboard": [
-                [{"text": "Verify Now", "url": f"https://zenithwave-refer.onrender.com/verify?uid={user_id}"}]
-            ]
-        }
+   keyboard = {
+       "inline_keyboard": [
+           [{"text": "🌐 Verify Now", "url": f"{BASE_URL}/verify?uid={user_id}"}],
+           [{"text": "✅ Check Verification", "callback_data": "check_verify"}]
+       ]
+   }
         send(user_id, "Complete verification", keyboard)
+
+if "callback_query" in data:
+    cq = data["callback_query"]
+    user_id = cq["from"]["id"]
+    data_cb = cq["data"]
+
+    # answer callback (IMPORTANT)
+    requests.post(
+        f"https://api.telegram.org/bot{BOT_TOKEN}/answerCallbackQuery",
+        json={"callback_query_id": cq["id"]}
+    )
+
+    if data_cb == "check_verify":
+        user = sb("users", params=f"?user_id=eq.{user_id}")
+
+        if user and user[0]["verified"]:
+            send(user_id, "✅ Verification Successful!", user_menu())
+        else:
+            send(user_id, "❌ You are not verified yet. Click Verify Now.")
+
+    return "ok"
 
     # ---------------- STATS ----------------
     elif text == "📊 Stats":
