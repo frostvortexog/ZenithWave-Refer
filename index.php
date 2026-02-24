@@ -1,5 +1,57 @@
 <?php
 
+// ================= WEB VERIFY ROUTE =================
+
+if($_SERVER['REQUEST_METHOD'] === 'POST' && strpos($_SERVER['REQUEST_URI'], '/verify') !== false){
+
+    $input = json_decode(file_get_contents("php://input"), true);
+
+    $user = $input["user"];
+    $device = $input["device"];
+
+    $supa_url = getenv("SUPABASE_URL");
+    $supa_key = getenv("SUPABASE_KEY");
+
+    function db($endpoint,$method="GET",$data=null){
+        global $supa_url,$supa_key;
+
+        $ch = curl_init("$supa_url/rest/v1/$endpoint");
+        curl_setopt($ch,CURLOPT_RETURNTRANSFER,true);
+
+        $headers = [
+            "apikey: $supa_key",
+            "Authorization: Bearer $supa_key",
+            "Content-Type: application/json"
+        ];
+
+        curl_setopt($ch,CURLOPT_HTTPHEADER,$headers);
+
+        if($method!="GET"){
+            curl_setopt($ch,CURLOPT_CUSTOMREQUEST,$method);
+            curl_setopt($ch,CURLOPT_POSTFIELDS,json_encode($data));
+        }
+
+        return json_decode(curl_exec($ch),true);
+    }
+
+    // 🔒 Check device already used
+    $check = db("users?device_id=eq.$device");
+
+    if(count($check) > 0){
+        echo json_encode(["status"=>"error","msg"=>"Device already used"]);
+        exit;
+    }
+
+    // ✅ Verify user
+    db("users?telegram_id=eq.$user","PATCH",[
+        "verified"=>true,
+        "device_id"=>$device
+    ]);
+
+    echo json_encode(["status"=>"success"]);
+    exit;
+}
+
 // ================= CONFIG =================
 $bot_token = getenv("BOT_TOKEN");
 $api = "https://api.telegram.org/bot$bot_token/";
