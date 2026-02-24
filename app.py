@@ -6,8 +6,6 @@ import os
 import uuid
 import re
 from datetime import datetime
-import threading
-import time
 from dotenv import load_dotenv
 import json
 
@@ -31,21 +29,24 @@ FORCE_JOIN_CHANNELS = [int(x.strip()) for x in os.getenv('FORCE_JOIN_CHANNELS', 
 WEBHOOK_URL = os.getenv('WEBHOOK_URL', 'https://your-app.onrender.com/verify')
 WITHDRAW_POINTS = 3
 
-# Safe database functions
-def safe_db_query(table, **kwargs):
+# FIXED Safe database functions - NO **kwargs syntax error
+def safe_db_query(table, filters=None):
+    """Safe database query with filters dict"""
     if not supabase_client:
         return {'data': []}
     try:
-        if kwargs:
-            result = supabase_client.table(table).select('*').**kwargs().execute()
-        else:
-            result = supabase_client.table(table).select('*').execute()
+        query = supabase_client.table(table).select('*')
+        if filters:
+            for key, value in filters.items():
+                query = query.eq(key, value)
+        result = query.execute()
         return result
     except Exception as e:
         print(f"❌ DB Query Error {table}: {e}")
         return {'data': []}
 
 def safe_db_insert(table, data):
+    """Safe database insert"""
     if not supabase_client:
         return False
     try:
@@ -55,21 +56,29 @@ def safe_db_insert(table, data):
         print(f"❌ Insert Error {table}: {e}")
         return False
 
-def safe_db_update(table, data, **kwargs):
+def safe_db_update(table, data, filters):
+    """Safe database update with filters dict"""
     if not supabase_client:
         return False
     try:
-        supabase_client.table(table).update(data).**kwargs().execute()
+        query = supabase_client.table(table).update(data)
+        for key, value in filters.items():
+            query = query.eq(key, value)
+        query.execute()
         return True
     except Exception as e:
         print(f"❌ Update Error {table}: {e}")
         return False
 
-def safe_db_delete(table, **kwargs):
+def safe_db_delete(table, filters):
+    """Safe database delete with filters dict"""
     if not supabase_client:
         return False
     try:
-        supabase_client.table(table).delete().**kwargs().execute()
+        query = supabase_client.table(table).delete()
+        for key, value in filters.items():
+            query = query.eq(key, value)
+        query.execute()
         return True
     except Exception as e:
         print(f"❌ Delete Error {table}: {e}")
@@ -88,8 +97,11 @@ def check_membership(user_id):
 
 # Generate unique referral link
 def get_referral_link(user_id):
-    bot_info = bot.get_me()
-    return f"https://t.me/{bot_info.username}?start=r{user_id}"
+    try:
+        bot_info = bot.get_me()
+        return f"https://t.me/{bot_info.username}?start=r{user_id}"
+    except:
+        return f"https://t.me/YOUR_BOT_USERNAME?start=r{user_id}"
 
 # Keyboards
 def main_menu(is_admin=False):
@@ -115,7 +127,6 @@ def force_join_keyboard():
 
 # Show main menu
 def show_main_menu(chat_id, user_id):
-    user = safe_db_query('users', user_id=user_id)
     is_admin = user_id in ADMIN_IDS
     bot.send_message(chat_id, "🏠 *Main Menu*", reply_markup=main_menu(is_admin), parse_mode='Markdown')
 
@@ -232,14 +243,14 @@ def start(message):
     if len(args) > 1 and args[1].startswith('r'):
         try:
             referer_id = int(args[1][1:])
-            referer = safe_db_query('users', user_id=referer_id)
+            referer = safe_db_query('users', {'user_id': referer_id})
             if referer.data and referer.data[0].get('verified', False):
                 referer_id = referer_id
         except:
             pass
     
     # Check if user exists
-    user = safe_db_query('users', user_id=user_id)
+    user = safe_db_query('users', {'user_id': user_id})
     
     if not user.data:
         # Create new user
@@ -278,13 +289,9 @@ def start(message):
     else:
         user_data = user.data[0]
         if user_data.get('verified', False):
-            # Handle verified user start param
-            if len(args) > 1 and args[1].startswith('verified_'):
-                show_main_menu(message.chat.id, user_id)
-            else:
-                show_main_menu(message.chat.id, user_id)
+            show_main_menu(message.chat.id, user_id)
         else:
-            bot.send_message(message.chat.id, "🔄 Please complete verification first!")
+            bot.send_message(message.chat.id, "🔄 *Please complete verification first!*", parse_mode='Markdown')
 
 @bot.callback_query_handler(func=lambda call: True)
 def callback_handler(call):
@@ -313,12 +320,12 @@ def callback_handler(call):
     
     elif call.data.startswith('verify_complete_'):
         token = call.data.split('_', 2)[2]
-        bot.send_message(call.from_user.id, f"🔗 *Complete verification:*\n\n{WEBHOOK_URL}?token={token}")
+        bot.send_message(call.from_user.id, f"🔗 *Complete verification:*\n\n{WEBHOOK_URL}?token={token}", parse_mode='Markdown')
 
 # User menu handlers
 @bot.message_handler(func=lambda message: message.text == '📊 Stats')
 def show_stats(message):
-    user = safe_db_query('users', user_id=message.from_user.id)
+    user = safe_db_query('users', {'user_id': message.from_user.id})
     if user.data:
         user_data = user.data[0]
         bot.send_message(message.chat.id, 
@@ -334,7 +341,7 @@ def referral_link(message):
 
 @bot.message_handler(func=lambda message: message.text == '💰 Withdraw')
 def withdraw(message):
-    user = safe_db_query('users', user_id=message.from_user.id)
+    user = safe_db_query('users', {'user_id': message.from_user.id})
     if not user.data:
         bot.send_message(message.chat.id, "❌ Please start the bot first!")
         return
@@ -342,13 +349,13 @@ def withdraw(message):
     user_data = user.data[0]
     
     if user_data.get('points', 0) < WITHDRAW_POINTS:
-        bot.send_message(message.chat.id, f"❌ *Not enough points!* Need {WITHDRAW_POINTS} points.")
+        bot.send_message(message.chat.id, f"❌ *Not enough points!* Need {WITHDRAW_POINTS} points.", parse_mode='Markdown')
         return
     
     # Check coupon stock
-    coupons = safe_db_query('coupons', used=False)
+    coupons = safe_db_query('coupons', {'used': False})
     if not coupons.data:
-        bot.send_message(message.chat.id, "❌ *Coupons are out of stock!*")
+        bot.send_message(message.chat.id, "❌ *Coupons are out of stock!*", parse_mode='Markdown')
         return
     
     # Send coupon
@@ -357,7 +364,7 @@ def withdraw(message):
         'used': True,
         'used_by': message.from_user.id,
         'redeemed_at': datetime.now().isoformat()
-    }, id=coupon['id'])
+    }, {'id': coupon['id']})
     
     safe_db_insert('redeems_log', {
         'user_id': message.from_user.id,
@@ -366,7 +373,7 @@ def withdraw(message):
     
     # Deduct points
     new_points = user_data['points'] - WITHDRAW_POINTS
-    safe_db_update('users', {'points': new_points}, user_id=message.from_user.id)
+    safe_db_update('users', {'points': new_points}, {'user_id': message.from_user.id})
     
     # Notify admin
     for admin_id in ADMIN_IDS:
@@ -386,16 +393,16 @@ def withdraw(message):
                     f"⭐ *{WITHDRAW_POINTS} points deducted.*", 
                     parse_mode='Markdown')
 
-@bot.message_handler(func=lambda message: message.text == '🔧 Admin Panel' and message.from_user.id in ADMIN_IDS)
+# Admin handlers
+admin_states = {}
+
+@bot.message_handler(func=lambda m: m.text == '🔧 Admin Panel' and m.from_user.id in ADMIN_IDS)
 def admin_panel(message):
     bot.send_message(message.chat.id, "🔧 *Admin Panel*", reply_markup=admin_menu(), parse_mode='Markdown')
 
 @bot.message_handler(func=lambda m: m.text == '🔙 Back to Main' and m.from_user.id in ADMIN_IDS)
 def back_to_main(message):
     show_main_menu(message.chat.id, message.from_user.id)
-
-# Admin handlers
-admin_states = {}
 
 @bot.message_handler(func=lambda m: m.text == '➕ Add Coupon' and m.from_user.id in ADMIN_IDS)
 def admin_add_coupon(message):
@@ -409,9 +416,9 @@ def admin_remove_coupon(message):
 
 @bot.message_handler(func=lambda m: m.text == '📦 Coupon Stock' and m.from_user.id in ADMIN_IDS)
 def coupon_stock(message):
-    coupons = safe_db_query('coupons', used=False)
+    coupons = safe_db_query('coupons', {'used': False})
     total = len(coupons.data)
-    bot.send_message(message.chat.id, f"📦 *Coupon Stock:* {total}")
+    bot.send_message(message.chat.id, f"📦 *Coupon Stock:* {total}", parse_mode='Markdown')
 
 @bot.message_handler(func=lambda m: m.text == '📋 Redeems Log' and m.from_user.id in ADMIN_IDS)
 def redeems_log(message):
@@ -419,17 +426,17 @@ def redeems_log(message):
     if logs.data:
         log_text = "📋 *Recent Redeems (Last 10):*\n\n"
         for log in logs.data[-10:]:
-            user = safe_db_query('users', user_id=log['user_id'])
+            user = safe_db_query('users', {'user_id': log['user_id']})
             username = user.data[0]['username'] if user.data else 'Unknown'
             log_text += f"• @{username} - `{log['coupon_code']}`\n"
         bot.send_message(message.chat.id, log_text, parse_mode='Markdown')
     else:
-        bot.send_message(message.chat.id, "📋 *No redeems yet!*")
+        bot.send_message(message.chat.id, "📋 *No redeems yet!*", parse_mode='Markdown')
 
 @bot.message_handler(func=lambda m: m.text == '⚙️ Change Withdraw Points' and m.from_user.id in ADMIN_IDS)
 def change_withdraw_points(message):
     admin_states[message.from_user.id] = 'change_points'
-    bot.send_message(message.chat.id, "🔢 *Send new withdraw points (current: 3):*")
+    bot.send_message(message.chat.id, "🔢 *Send new withdraw points (current: 3):*", parse_mode='Markdown')
 
 # Handle admin input states
 @bot.message_handler(func=lambda message: message.from_user.id in ADMIN_IDS)
@@ -452,12 +459,12 @@ def handle_admin_input(message):
     elif state == 'remove_coupon':
         try:
             count = int(message.text.strip())
-            coupons = safe_db_query('coupons', used=False)
+            coupons = safe_db_query('coupons', {'used': False})
             for coupon in coupons.data[:count]:
-                safe_db_delete('coupons', id=coupon['id'])
+                safe_db_delete('coupons', {'id': coupon['id']})
             bot.reply_to(message, f"✅ *Removed {count} coupons.*", parse_mode='Markdown')
         except:
-            bot.reply_to(message, "❌ *Invalid number!*")
+            bot.reply_to(message, "❌ *Invalid number!*", parse_mode='Markdown')
         del admin_states[user_id]
     
     elif state == 'change_points':
@@ -466,7 +473,7 @@ def handle_admin_input(message):
             WITHDRAW_POINTS = int(message.text.strip())
             bot.reply_to(message, f"✅ *Withdraw points updated:* {WITHDRAW_POINTS}", parse_mode='Markdown')
         except:
-            bot.reply_to(message, "❌ *Invalid number!*")
+            bot.reply_to(message, "❌ *Invalid number!*", parse_mode='Markdown')
         del admin_states[user_id]
 
 # Web verification routes
@@ -482,32 +489,32 @@ def api_verify():
         token = data.get('token')
         
         # Verify token
-        token_data = safe_db_query('verification_tokens', token=token)
+        token_data = safe_db_query('verification_tokens', {'token': token})
         if not token_data.data or token_data.data[0].get('used', True):
             return {'success': False, 'message': 'Invalid or used token'}
         
         user_id = token_data.data[0]['user_id']
-        user = safe_db_query('users', user_id=user_id)
+        user = safe_db_query('users', {'user_id': user_id})
         
         if not user.data or user.data[0].get('verified', True):
             return {'success': False, 'message': 'User already verified'}
         
         # Mark as verified
-        safe_db_update('verification_tokens', {'used': True}, token=token)
-        safe_db_update('users', {'verified': True}, user_id=user_id)
+        safe_db_update('verification_tokens', {'used': True}, {'token': token})
+        safe_db_update('users', {'verified': True}, {'user_id': user_id})
         
         # Check for referer and award points
         user_data = user.data[0]
         referer_id = user_data.get('referer_id')
         if referer_id:
-            referer = safe_db_query('users', user_id=referer_id)
+            referer = safe_db_query('users', {'user_id': referer_id})
             if referer.data:
                 new_referrals = referer.data[0].get('referrals', 0) + 1
                 new_points = referer.data[0].get('points', 0) + 1
                 safe_db_update('users', {
                     'referrals': new_referrals,
                     'points': new_points
-                }, user_id=referer_id)
+                }, {'user_id': referer_id})
                 
                 # Notify referer
                 try:
@@ -532,10 +539,26 @@ def api_verify():
 # Health check
 @app.route('/')
 def health_check():
-    return "Bot is running! 🚀"
+    return "🤖 Referral Bot is running perfectly! 🚀"
 
 if __name__ == '__main__':
-    print("🤖 Bot starting...")
+    print("🤖 Starting Referral Bot...")
     print(f"👥 Admins: {ADMIN_IDS}")
-    print(f"📢 Channels: {FORCE_JOIN_CHANNELS}")
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+    print(f"📢 Force join channels: {len(FORCE_JOIN_CHANNELS)}")
+    print(f"🌐 Webhook URL: {WEBHOOK_URL}")
+    
+    # Start bot polling in background
+    def start_polling():
+        while True:
+            try:
+                bot.polling(none_stop=True, interval=0, timeout=20)
+            except Exception as e:
+                print(f"Polling error: {e}")
+                time.sleep(15)
+    
+    import threading
+    threading.Thread(target=start_polling, daemon=True).start()
+    
+    # Start Flask
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)
