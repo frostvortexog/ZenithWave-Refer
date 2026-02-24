@@ -15,7 +15,7 @@ user_states = {}
 
 # ---------------- TELEGRAM ----------------
 def send(chat_id, text, keyboard=None):
-    url = f"https://api.telegram.org/bot{8690047179:AAFMw-o-AYhMJ8eEjLfQKsBsgUF7W2N3onw}/sendMessage"
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     data = {"chat_id": chat_id, "text": text}
     if keyboard:
         data["reply_markup"] = keyboard
@@ -42,7 +42,7 @@ def sb(table, method="get", data=None, params=""):
 def check_join(user_id):
     for ch in CHANNELS:
         res = requests.get(
-            f"https://api.telegram.org/bot{8690047179:AAFMw-o-AYhMJ8eEjLfQKsBsgUF7W2N3onw}/getChatMember",
+            f"https://api.telegram.org/bot{BOT_TOKEN}/getChatMember",
             params={"chat_id": ch, "user_id": user_id}
         ).json()
 
@@ -71,7 +71,7 @@ def admin_menu():
     }
 
 # ---------------- BOT ----------------
-@app.route(f"/{8690047179:AAFMw-o-AYhMJ8eEjLfQKsBsgUF7W2N3onw}", methods=["POST"])
+@app.route(f"/{BOT_TOKEN}", methods=["POST"])
 def bot():
     data = request.json
 
