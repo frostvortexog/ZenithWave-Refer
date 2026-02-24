@@ -33,6 +33,30 @@ if(
         exit;
     }
 
+    function db($endpoint,$method="GET",$data=null){
+    global $supa_url,$supa_key;
+
+    $ch = curl_init("$supa_url/rest/v1/$endpoint");
+    curl_setopt($ch,CURLOPT_RETURNTRANSFER,true);
+
+    $headers = [
+        "apikey: $supa_key",
+        "Authorization: Bearer $supa_key",
+        "Content-Type: application/json"
+    ];
+
+    curl_setopt($ch,CURLOPT_HTTPHEADER,$headers);
+
+    if($method!="GET"){
+        curl_setopt($ch,CURLOPT_CUSTOMREQUEST,$method);
+        curl_setopt($ch,CURLOPT_POSTFIELDS,json_encode($data));
+    }
+
+    $res = curl_exec($ch);
+
+    return json_decode($res,true);
+}
+    
     // DB call (no function redeclare)
     $check = db("users?device_id=eq.$device");
 
@@ -74,7 +98,7 @@ $supa_key = getenv("SUPABASE_KEY");
 $admin_id = 8537079657; // CHANGE
 
 $channels = ["@ZenithWave_Shein","@ZenithWaveLoots","@ZenithWave_Shein_Backup"];
-$verify_url = "zenith-wave-refer-bot.vercel.app"; // CHANGE
+$verify_url = "https://zenith-wave-refer-bot.vercel.app"; // CHANGE
 
 // ================= FUNCTIONS =================
 
