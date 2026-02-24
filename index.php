@@ -10,7 +10,7 @@ $supa_key = getenv("SUPABASE_KEY");
 $admin_id = 8537079657; // CHANGE
 
 $channels = ["@ZenithWave_Shein","@ZenithWaveLoots","@ZenithWave_Shein_Backup"];
-$verify_url = "https://zenithwave-refer-1.onrender.com"; // CHANGE
+$verify_url = "zenith-wave-refer-bot.vercel.app"; // CHANGE
 
 // ================= FUNCTIONS =================
 
