@@ -122,9 +122,9 @@ bot("sendMessage",[
 "text"=>"🔒 Join all channels",
 "reply_markup"=>json_encode([
 "inline_keyboard"=>[
-[["text"=>"Channel 1","url"=>"https://t.me/channel1"]],
-[["text"=>"Channel 2","url"=>"https://t.me/channel2"]],
-[["text"=>"Channel 3","url"=>"https://t.me/channel3"]],
+[["text"=>"Channel 1","url"=>"https://t.me/ZenithWave_Shein"]],
+[["text"=>"Channel 2","url"=>"https://t.me/ZenithWaveLoots"]],
+[["text"=>"Channel 3","url"=>"https://t.me/ZenithWave_Shein_Backup"]],
 [["text"=>"✅ Joined","callback_data"=>"check_join"]]
 ]
 ])
