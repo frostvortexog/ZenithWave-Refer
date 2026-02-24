@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Verify</title>
+
+<style>
+body {
+  background: linear-gradient(135deg,#0f172a,#1e293b);
+  color: white;
+  text-align: center;
+  font-family: Arial;
+  padding-top: 100px;
+}
+button {
+  padding: 15px 30px;
+  font-size: 18px;
+  border-radius: 12px;
+  border: none;
+  background: #22c55e;
+  color: white;
+  cursor: pointer;
+}
+</style>
+</head>
+
+<body>
+
+<h1>🔐 Verification Required</h1>
+<p>Click below to verify</p>
+
+<button onclick="verify()">Verify Now</button>
+
+<script>
+const url = new URL(window.location.href);
+const user = url.searchParams.get("user");
+
+function getDevice(){
+  return navigator.userAgent + screen.width + screen.height;
+}
+
+async function verify(){
+
+  let device = btoa(getDevice());
+
+  let res = await fetch("https://YOUR-BACKEND.onrender.com/verify",{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({
+      user:user,
+      device:device
+    })
+  });
+
+  alert("Verified! Go back to Telegram");
+
+  window.location.href = "https://t.me/YOUR_BOT";
+}
+</script>
+
+</body>
+</html>
