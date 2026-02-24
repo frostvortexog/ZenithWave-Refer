@@ -113,7 +113,7 @@ def bot():
 
         keyboard = {
             "inline_keyboard": [
-                [{"text": "Verify Now", "url": f"https://yourapp.onrender.com/verify?uid={user_id}"}]
+                [{"text": "Verify Now", "url": f"https://zenithwave-refer.onrender.com/verify?uid={user_id}"}]
             ]
         }
         send(user_id, "Complete verification", keyboard)
