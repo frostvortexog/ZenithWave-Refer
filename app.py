@@ -4,20 +4,120 @@ from flask import Flask, request, render_template_string
 import supabase
 import os
 import uuid
-import requests
 import re
 from datetime import datetime
 import threading
 import time
+from dotenv import load_dotenv
+import json
 
-# Initialize
+# Load environment variables
+load_dotenv()
+
 app = Flask(__name__)
 bot = telebot.TeleBot(os.getenv('BOT_TOKEN'))
-supabase_client = supabase.create_client(os.getenv('SUPABASE_URL'), os.getenv('SUPABASE_KEY'))
 
-ADMIN_IDS = [int(x) for x in os.getenv('ADMIN_IDS').split(',')]
-FORCE_JOIN_CHANNELS = [int(x) for x in os.getenv('FORCE_JOIN_CHANNELS').split(',')]
-WEBHOOK_URL = os.getenv('WEBHOOK_URL')
+# Safe Supabase initialization
+supabase_client = None
+try:
+    supabase_client = supabase.create_client(os.getenv('SUPABASE_URL'), os.getenv('SUPABASE_KEY'))
+    print("✅ Supabase connected successfully!")
+except Exception as e:
+    print(f"❌ Supabase connection failed: {e}")
+
+# Environment variables
+ADMIN_IDS = [int(x.strip()) for x in os.getenv('ADMIN_IDS', '').split(',') if x.strip()]
+FORCE_JOIN_CHANNELS = [int(x.strip()) for x in os.getenv('FORCE_JOIN_CHANNELS', '').split(',') if x.strip()]
+WEBHOOK_URL = os.getenv('WEBHOOK_URL', 'https://your-app.onrender.com/verify')
+WITHDRAW_POINTS = 3
+
+# Safe database functions
+def safe_db_query(table, **kwargs):
+    if not supabase_client:
+        return {'data': []}
+    try:
+        if kwargs:
+            result = supabase_client.table(table).select('*').**kwargs().execute()
+        else:
+            result = supabase_client.table(table).select('*').execute()
+        return result
+    except Exception as e:
+        print(f"❌ DB Query Error {table}: {e}")
+        return {'data': []}
+
+def safe_db_insert(table, data):
+    if not supabase_client:
+        return False
+    try:
+        supabase_client.table(table).insert(data).execute()
+        return True
+    except Exception as e:
+        print(f"❌ Insert Error {table}: {e}")
+        return False
+
+def safe_db_update(table, data, **kwargs):
+    if not supabase_client:
+        return False
+    try:
+        supabase_client.table(table).update(data).**kwargs().execute()
+        return True
+    except Exception as e:
+        print(f"❌ Update Error {table}: {e}")
+        return False
+
+def safe_db_delete(table, **kwargs):
+    if not supabase_client:
+        return False
+    try:
+        supabase_client.table(table).delete().**kwargs().execute()
+        return True
+    except Exception as e:
+        print(f"❌ Delete Error {table}: {e}")
+        return False
+
+# Check if user joined all channels
+def check_membership(user_id):
+    for channel in FORCE_JOIN_CHANNELS:
+        try:
+            member = bot.get_chat_member(channel, user_id)
+            if member.status in ['left', 'kicked']:
+                return False
+        except:
+            return False
+    return True
+
+# Generate unique referral link
+def get_referral_link(user_id):
+    bot_info = bot.get_me()
+    return f"https://t.me/{bot_info.username}?start=r{user_id}"
+
+# Keyboards
+def main_menu(is_admin=False):
+    markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    markup.add(KeyboardButton('📊 Stats'), KeyboardButton('🔗 Referral Link'))
+    markup.add(KeyboardButton('💰 Withdraw'))
+    if is_admin:
+        markup.add(KeyboardButton('🔧 Admin Panel'))
+    return markup
+
+def admin_menu():
+    markup = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    markup.add(KeyboardButton('➕ Add Coupon'), KeyboardButton('➖ Remove Coupon'))
+    markup.add(KeyboardButton('📦 Coupon Stock'), KeyboardButton('📋 Redeems Log'))
+    markup.add(KeyboardButton('⚙️ Change Withdraw Points'))
+    markup.add(KeyboardButton('🔙 Back to Main'))
+    return markup
+
+def force_join_keyboard():
+    markup = InlineKeyboardMarkup(row_width=1)
+    markup.add(InlineKeyboardButton('✅ Joined All Channels', callback_data='check_channels'))
+    return markup
+
+# Show main menu
+def show_main_menu(chat_id, user_id):
+    user = safe_db_query('users', user_id=user_id)
+    is_admin = user_id in ADMIN_IDS
+    bot.send_message(chat_id, "🏠 *Main Menu*", reply_markup=main_menu(is_admin), parse_mode='Markdown')
 
 # HTML Template for verification
 VERIFICATION_HTML = """
@@ -74,20 +174,19 @@ VERIFICATION_HTML = """
         <div class="logo">🔍</div>
         <h1>Complete Verification</h1>
         <p>Click the button below to verify your account. This ensures one device per user.</p>
-        <button class="verify-btn" onclick="verifyUser()">Verify Now</button>
+        <button class="verify-btn" id="verifyBtn">Verify Now</button>
         <div id="status" class="status"></div>
     </div>
 
     <script>
         const urlParams = new URLSearchParams(window.location.search);
         const token = urlParams.get('token');
+        const verifyBtn = document.getElementById('verifyBtn');
+        const status = document.getElementById('status');
         
-        async function verifyUser() {
-            const btn = document.querySelector('.verify-btn');
-            const status = document.getElementById('status');
-            
-            btn.disabled = true;
-            btn.textContent = 'Verifying...';
+        verifyBtn.addEventListener('click', async function() {
+            verifyBtn.disabled = true;
+            verifyBtn.innerHTML = 'Verifying...';
             
             try {
                 const response = await fetch('/api/verify', {
@@ -107,52 +206,22 @@ VERIFICATION_HTML = """
                 } else {
                     status.textContent = data.message || 'Verification failed';
                     status.className = 'status error';
-                    btn.disabled = false;
-                    btn.textContent = 'Verify Now';
+                    verifyBtn.disabled = false;
+                    verifyBtn.innerHTML = 'Verify Now';
                 }
             } catch (error) {
                 status.textContent = 'Network error. Please try again.';
                 status.className = 'status error';
-                btn.disabled = false;
-                btn.textContent = 'Verify Now';
+                verifyBtn.disabled = false;
+                verifyBtn.innerHTML = 'Verify Now';
             }
-        }
+        });
     </script>
 </body>
 </html>
 """
 
-# Check if user joined all channels
-def check_membership(user_id):
-    for channel in FORCE_JOIN_CHANNELS:
-        try:
-            member = bot.get_chat_member(channel, user_id)
-            if member.status in ['left', 'kicked']:
-                return False
-        except:
-            return False
-    return True
-
-# Generate unique referral link
-def get_referral_link(user_id):
-    return f"https://t.me/{bot.get_me().username}?start=r{user_id}"
-
-# Main menu keyboard
-def main_menu():
-    markup = ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add(KeyboardButton('📊 Stats'), KeyboardButton('🔗 Referral Link'))
-    markup.add(KeyboardButton('💰 Withdraw'))
-    return markup
-
-# Admin menu keyboard
-def admin_menu():
-    markup = ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add(KeyboardButton('➕ Add Coupon'), KeyboardButton('➖ Remove Coupon'))
-    markup.add(KeyboardButton('📦 Coupon Stock'), KeyboardButton('📋 Redeems Log'))
-    markup.add(KeyboardButton('⚙️ Change Withdraw Points'))
-    markup.add(KeyboardButton('🔙 Back to Main'))
-    return markup
-
+# Bot Handlers
 @bot.message_handler(commands=['start'])
 def start(message):
     user_id = message.from_user.id
@@ -163,37 +232,59 @@ def start(message):
     if len(args) > 1 and args[1].startswith('r'):
         try:
             referer_id = int(args[1][1:])
-            # Check if referer exists and is verified
-            referer = supabase_client.table('users').select('*').eq('user_id', referer_id).execute()
-            if referer.data and referer.data[0]['verified']:
+            referer = safe_db_query('users', user_id=referer_id)
+            if referer.data and referer.data[0].get('verified', False):
                 referer_id = referer_id
         except:
             pass
     
     # Check if user exists
-    user = supabase_client.table('users').select('*').eq('user_id', user_id).execute()
+    user = safe_db_query('users', user_id=user_id)
     
     if not user.data:
         # Create new user
-        supabase_client.table('users').insert({
+        safe_db_insert('users', {
             'user_id': user_id,
             'username': message.from_user.username,
             'first_name': message.from_user.first_name,
+            'referrals': 0,
+            'points': 0,
+            'verified': False,
             'referer_id': referer_id
-        }).execute()
+        })
         
-        # Force join channels
-        markup = InlineKeyboardMarkup()
-        markup.add(InlineKeyboardButton('✅ Joined All Channels', callback_data='check_channels'))
-        bot.send_message(message.chat.id, 
-                        "👋 Welcome!\n\nPlease join our channels first:\n\n"
-                        + "\n".join([f"• [Channel {i+1}](https://t.me/c/{str(ch)[4:]}/1)" for i, ch in enumerate(FORCE_JOIN_CHANNELS)]),
-                        reply_markup=markup, parse_mode='Markdown', disable_web_page_preview=True)
+        # Perfect start message
+        markup = force_join_keyboard()
+        channel_links = []
+        for i, channel_id in enumerate(FORCE_JOIN_CHANNELS, 1):
+            clean_id = str(channel_id)[4:] if str(channel_id).startswith('-100') else str(channel_id)
+            channel_links.append(f"• [Channel {i}](https://t.me/c/{clean_id}/1)")
+        
+        message_text = f"""👋 *Welcome to Referral Bot!* 🎉
+
+📢 *Please join our 3 channels first:*
+
+{chr(10).join(channel_links)}
+
+👇 *Click the button after joining all channels* 👇"""
+        
+        bot.send_message(
+            message.chat.id, 
+            message_text,
+            reply_markup=markup, 
+            parse_mode='Markdown',
+            disable_web_page_preview=True
+        )
     else:
-        if user.data[0]['verified']:
-            show_main_menu(message)
+        user_data = user.data[0]
+        if user_data.get('verified', False):
+            # Handle verified user start param
+            if len(args) > 1 and args[1].startswith('verified_'):
+                show_main_menu(message.chat.id, user_id)
+            else:
+                show_main_menu(message.chat.id, user_id)
         else:
-            show_verification_step(message)
+            bot.send_message(message.chat.id, "🔄 Please complete verification first!")
 
 @bot.callback_query_handler(func=lambda call: True)
 def callback_handler(call):
@@ -201,140 +292,232 @@ def callback_handler(call):
         if check_membership(call.from_user.id):
             # Generate verification token
             token = str(uuid.uuid4())
-            supabase_client.table('verification_tokens').insert({
+            safe_db_insert('verification_tokens', {
                 'user_id': call.from_user.id,
                 'token': token
-            }).execute()
+            })
             
-            markup = InlineKeyboardMarkup()
+            markup = InlineKeyboardMarkup(row_width=1)
             markup.add(InlineKeyboardButton('🔍 Verify Now', url=f"{WEBHOOK_URL}?token={token}"))
             markup.add(InlineKeyboardButton('✅ Complete Verification', callback_data=f'verify_complete_{token}'))
             
-            bot.edit_message_text("✅ All channels joined!\n\nPlease complete web verification:", 
-                                call.message.chat.id, call.message.message_id, reply_markup=markup)
+            bot.edit_message_text(
+                "✅ *All channels joined!*\n\n*Please complete web verification:*", 
+                call.message.chat.id, 
+                call.message.message_id, 
+                reply_markup=markup,
+                parse_mode='Markdown'
+            )
         else:
             bot.answer_callback_query(call.id, "❌ Please join all channels first!")
     
     elif call.data.startswith('verify_complete_'):
         token = call.data.split('_', 2)[2]
-        bot.send_message(call.from_user.id, 
-                        "🔗 Please complete verification:\n" +
-                        f"https://your-domain.onrender.com/verify.html?token={token}")
+        bot.send_message(call.from_user.id, f"🔗 *Complete verification:*\n\n{WEBHOOK_URL}?token={token}")
 
-def show_main_menu(message):
-    bot.send_message(message.chat.id, "🏠 Main Menu:", reply_markup=main_menu())
-
-def show_admin_menu(message):
-    bot.send_message(message.chat.id, "🔧 Admin Panel:", reply_markup=admin_menu())
-
+# User menu handlers
 @bot.message_handler(func=lambda message: message.text == '📊 Stats')
 def show_stats(message):
-    user = supabase_client.table('users').select('*').eq('user_id', message.from_user.id).execute()
+    user = safe_db_query('users', user_id=message.from_user.id)
     if user.data:
+        user_data = user.data[0]
         bot.send_message(message.chat.id, 
-                        f"📊 Your Stats:\n\n"
-                        f"👥 Referrals: {user.data[0]['referrals']}\n"
-                        f"⭐ Points: {user.data[0]['points']}")
+                        f"📊 *Your Stats:*\n\n"
+                        f"👥 *Referrals:* {user_data.get('referrals', 0)}\n"
+                        f"⭐ *Points:* {user_data.get('points', 0)}", 
+                        parse_mode='Markdown')
 
 @bot.message_handler(func=lambda message: message.text == '🔗 Referral Link')
 def referral_link(message):
     link = get_referral_link(message.from_user.id)
-    bot.send_message(message.chat.id, f"🔗 Your referral link:\n\n{link}")
+    bot.send_message(message.chat.id, f"🔗 *Your referral link:*\n\n`{link}`\n\n*Share this link to earn points!*", parse_mode='Markdown')
 
 @bot.message_handler(func=lambda message: message.text == '💰 Withdraw')
 def withdraw(message):
-    user = supabase_client.table('users').select('*').eq('user_id', message.from_user.id).execute()
+    user = safe_db_query('users', user_id=message.from_user.id)
     if not user.data:
         bot.send_message(message.chat.id, "❌ Please start the bot first!")
         return
     
     user_data = user.data[0]
     
-    # Get withdraw points requirement
-    withdraw_points_res = supabase_client.table('settings').select('withdraw_points').eq('key', 'withdraw_points').execute()
-    withdraw_points = withdraw_points_res.data[0]['withdraw_points'] if withdraw_points_res.data else 3
-    
-    if user_data['points'] < withdraw_points:
-        bot.send_message(message.chat.id, f"❌ Not enough points! Need {withdraw_points} points.")
+    if user_data.get('points', 0) < WITHDRAW_POINTS:
+        bot.send_message(message.chat.id, f"❌ *Not enough points!* Need {WITHDRAW_POINTS} points.")
         return
     
     # Check coupon stock
-    coupons = supabase_client.table('coupons').select('id').eq('used', False).execute()
+    coupons = safe_db_query('coupons', used=False)
     if not coupons.data:
-        bot.send_message(message.chat.id, "❌ Coupons are out of stock!")
+        bot.send_message(message.chat.id, "❌ *Coupons are out of stock!*")
         return
     
     # Send coupon
     coupon = coupons.data[0]
-    supabase_client.table('coupons').update({
+    safe_db_update('coupons', {
         'used': True,
         'used_by': message.from_user.id,
         'redeemed_at': datetime.now().isoformat()
-    }).eq('id', coupon['id']).execute()
+    }, id=coupon['id'])
     
-    supabase_client.table('redeems_log').insert({
+    safe_db_insert('redeems_log', {
         'user_id': message.from_user.id,
         'coupon_code': coupon['code']
-    }).execute()
+    })
     
     # Deduct points
-    supabase_client.table('users').update({'points': user_data['points'] - withdraw_points}).eq('user_id', message.from_user.id).execute()
+    new_points = user_data['points'] - WITHDRAW_POINTS
+    safe_db_update('users', {'points': new_points}, user_id=message.from_user.id)
     
     # Notify admin
     for admin_id in ADMIN_IDS:
         try:
-            bot.send_message(admin_id, f"✅ User @{message.from_user.username} redeemed coupon `{coupon['code']}` at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", parse_mode='Markdown')
+            bot.send_message(admin_id, 
+                           f"✅ *User redeemed coupon!*\n"
+                           f"👤 @{message.from_user.username}\n"
+                           f"🎫 `{coupon['code']}`\n"
+                           f"⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", 
+                           parse_mode='Markdown')
         except:
             pass
     
-    bot.send_message(message.chat.id, f"✅ Coupon `{coupon['code']}` sent!\n⭐ {withdraw_points} points deducted.")
+    bot.send_message(message.chat.id, 
+                    f"✅ *Coupon sent!*\n"
+                    f"🎫 `{coupon['code']}`\n"
+                    f"⭐ *{WITHDRAW_POINTS} points deducted.*", 
+                    parse_mode='Markdown')
+
+@bot.message_handler(func=lambda message: message.text == '🔧 Admin Panel' and message.from_user.id in ADMIN_IDS)
+def admin_panel(message):
+    bot.send_message(message.chat.id, "🔧 *Admin Panel*", reply_markup=admin_menu(), parse_mode='Markdown')
+
+@bot.message_handler(func=lambda m: m.text == '🔙 Back to Main' and m.from_user.id in ADMIN_IDS)
+def back_to_main(message):
+    show_main_menu(message.chat.id, message.from_user.id)
 
 # Admin handlers
-@bot.message_handler(func=lambda m: m.from_user.id in ADMIN_IDS and m.text == '➕ Add Coupon')
-def admin_add_coupon(message):
-    bot.send_message(message.chat.id, "📤 Send coupons line by line:")
+admin_states = {}
 
-@bot.message_handler(func=lambda m: m.from_user.id in ADMIN_IDS)
+@bot.message_handler(func=lambda m: m.text == '➕ Add Coupon' and m.from_user.id in ADMIN_IDS)
+def admin_add_coupon(message):
+    admin_states[message.from_user.id] = 'add_coupon'
+    bot.send_message(message.chat.id, "📤 *Send coupons line by line*\n\n*Format:* `ABC123`\n*6-12 uppercase letters/numbers*", parse_mode='Markdown')
+
+@bot.message_handler(func=lambda m: m.text == '➖ Remove Coupon' and m.from_user.id in ADMIN_IDS)
+def admin_remove_coupon(message):
+    admin_states[message.from_user.id] = 'remove_coupon'
+    bot.send_message(message.chat.id, "🔢 *Send number of coupons to remove:*")
+
+@bot.message_handler(func=lambda m: m.text == '📦 Coupon Stock' and m.from_user.id in ADMIN_IDS)
+def coupon_stock(message):
+    coupons = safe_db_query('coupons', used=False)
+    total = len(coupons.data)
+    bot.send_message(message.chat.id, f"📦 *Coupon Stock:* {total}")
+
+@bot.message_handler(func=lambda m: m.text == '📋 Redeems Log' and m.from_user.id in ADMIN_IDS)
+def redeems_log(message):
+    logs = safe_db_query('redeems_log')
+    if logs.data:
+        log_text = "📋 *Recent Redeems (Last 10):*\n\n"
+        for log in logs.data[-10:]:
+            user = safe_db_query('users', user_id=log['user_id'])
+            username = user.data[0]['username'] if user.data else 'Unknown'
+            log_text += f"• @{username} - `{log['coupon_code']}`\n"
+        bot.send_message(message.chat.id, log_text, parse_mode='Markdown')
+    else:
+        bot.send_message(message.chat.id, "📋 *No redeems yet!*")
+
+@bot.message_handler(func=lambda m: m.text == '⚙️ Change Withdraw Points' and m.from_user.id in ADMIN_IDS)
+def change_withdraw_points(message):
+    admin_states[message.from_user.id] = 'change_points'
+    bot.send_message(message.chat.id, "🔢 *Send new withdraw points (current: 3):*")
+
+# Handle admin input states
+@bot.message_handler(func=lambda message: message.from_user.id in ADMIN_IDS)
 def handle_admin_input(message):
-    if message.reply_to_message and "Send coupons line by line" in message.reply_to_message.text:
+    user_id = message.from_user.id
+    state = admin_states.get(user_id)
+    
+    if state == 'add_coupon':
         coupon_code = message.text.strip().upper()
         if re.match(r'^[A-Z0-9]{6,12}$', coupon_code):
-            supabase_client.table('coupons').insert({
+            safe_db_insert('coupons', {
                 'code': coupon_code,
                 'used': False
-            }).execute()
-            bot.reply_to(message, f"✅ Added coupon: `{coupon_code}`", parse_mode='Markdown')
+            })
+            bot.reply_to(message, f"✅ *Added coupon:* `{coupon_code}`", parse_mode='Markdown')
         else:
-            bot.reply_to(message, "❌ Invalid format! Use 6-12 uppercase letters/numbers.")
-        return
+            bot.reply_to(message, "❌ *Invalid format!* Use 6-12 uppercase letters/numbers.", parse_mode='Markdown')
+        del admin_states[user_id]
     
-    # Handle other admin commands similarly...
+    elif state == 'remove_coupon':
+        try:
+            count = int(message.text.strip())
+            coupons = safe_db_query('coupons', used=False)
+            for coupon in coupons.data[:count]:
+                safe_db_delete('coupons', id=coupon['id'])
+            bot.reply_to(message, f"✅ *Removed {count} coupons.*", parse_mode='Markdown')
+        except:
+            bot.reply_to(message, "❌ *Invalid number!*")
+        del admin_states[user_id]
+    
+    elif state == 'change_points':
+        try:
+            global WITHDRAW_POINTS
+            WITHDRAW_POINTS = int(message.text.strip())
+            bot.reply_to(message, f"✅ *Withdraw points updated:* {WITHDRAW_POINTS}", parse_mode='Markdown')
+        except:
+            bot.reply_to(message, "❌ *Invalid number!*")
+        del admin_states[user_id]
 
-def handle_web_verification():
-    @app.route('/verify.html')
-    def verification_page():
-        token = request.args.get('token')
-        return render_template_string(VERIFICATION_HTML)
-    
-    @app.route('/api/verify', methods=['POST'])
-    def api_verify():
+# Web verification routes
+@app.route('/verify')
+def verification_page():
+    token = request.args.get('token')
+    return render_template_string(VERIFICATION_HTML)
+
+@app.route('/api/verify', methods=['POST'])
+def api_verify():
+    try:
         data = request.json
         token = data.get('token')
         
-        # Verify token and user
-        token_data = supabase_client.table('verification_tokens').select('*').eq('token', token).execute()
-        if not token_data.data or token_data.data[0]['used']:
+        # Verify token
+        token_data = safe_db_query('verification_tokens', token=token)
+        if not token_data.data or token_data.data[0].get('used', True):
             return {'success': False, 'message': 'Invalid or used token'}
         
         user_id = token_data.data[0]['user_id']
-        user = supabase_client.table('users').select('*').eq('user_id', user_id).eq('verified', False).execute()
+        user = safe_db_query('users', user_id=user_id)
         
-        if not user.data:
-            return {'success': False, 'message': 'User already verified or not found'}
+        if not user.data or user.data[0].get('verified', True):
+            return {'success': False, 'message': 'User already verified'}
         
         # Mark as verified
-        supabase_client.table('verification_tokens').update({'used': True}).eq('token', token).execute()
-        supabase_client.table('users').update({'verified': True}).eq('user_id', user_id).execute()
+        safe_db_update('verification_tokens', {'used': True}, token=token)
+        safe_db_update('users', {'verified': True}, user_id=user_id)
+        
+        # Check for referer and award points
+        user_data = user.data[0]
+        referer_id = user_data.get('referer_id')
+        if referer_id:
+            referer = safe_db_query('users', user_id=referer_id)
+            if referer.data:
+                new_referrals = referer.data[0].get('referrals', 0) + 1
+                new_points = referer.data[0].get('points', 0) + 1
+                safe_db_update('users', {
+                    'referrals': new_referrals,
+                    'points': new_points
+                }, user_id=referer_id)
+                
+                # Notify referer
+                try:
+                    bot.send_message(referer_id, 
+                                   f"🎉 *New referral!*\n"
+                                   f"👤 New user: @{user_data.get('username', 'Unknown')}\n"
+                                   f"⭐ *+1 point* (Total: {new_points})",
+                                   parse_mode='Markdown')
+                except:
+                    pass
         
         bot_info = bot.get_me()
         return {
@@ -342,13 +525,17 @@ def handle_web_verification():
             'bot_username': bot_info.username,
             'message': 'Verified successfully!'
         }
-    
-    return app
+    except Exception as e:
+        print(f"Verification error: {e}")
+        return {'success': False, 'message': 'Server error'}
 
-# Run bot
+# Health check
+@app.route('/')
+def health_check():
+    return "Bot is running! 🚀"
+
 if __name__ == '__main__':
-    # Initialize settings
-    supabase_client.table('settings').upsert({'key': 'withdraw_points', 'value': 3}, on_conflict='key').execute()
-    
-    print("Bot started!")
-    handle_web_verification().run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+    print("🤖 Bot starting...")
+    print(f"👥 Admins: {ADMIN_IDS}")
+    print(f"📢 Channels: {FORCE_JOIN_CHANNELS}")
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
