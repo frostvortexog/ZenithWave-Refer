@@ -18,9 +18,67 @@ if($_SERVER['REQUEST_METHOD'] === 'OPTIONS'){
 // ===== VERIFY ROUTE =====
 if(strpos($_SERVER['REQUEST_URI'], 'verify') !== false){
 
+if(strpos($_SERVER['REQUEST_URI'], 'verify') !== false){
+
+    $input = json_decode(file_get_contents("php://input"), true);
+
+    if(!$input){
+        echo json_encode(["status"=>"error","msg"=>"No input"]);
+        exit;
+    }
+
+    $user = $input["user"] ?? null;
+    $device = $input["device"] ?? null;
+
+    if(!$user || !$device){
+        echo json_encode(["status"=>"error","msg"=>"Missing data"]);
+        exit;
+    }
+
+    $supa_url = getenv("SUPABASE_URL");
+    $supa_key = getenv("SUPABASE_KEY");
+
+    function db($endpoint,$method="GET",$data=null){
+        global $supa_url,$supa_key;
+
+        $ch = curl_init("$supa_url/rest/v1/$endpoint");
+        curl_setopt($ch,CURLOPT_RETURNTRANSFER,true);
+
+        $headers = [
+            "apikey: $supa_key",
+            "Authorization: Bearer $supa_key",
+            "Content-Type: application/json"
+        ];
+
+        curl_setopt($ch,CURLOPT_HTTPHEADER,$headers);
+
+        if($method!="GET"){
+            curl_setopt($ch,CURLOPT_CUSTOMREQUEST,$method);
+            curl_setopt($ch,CURLOPT_POSTFIELDS,json_encode($data));
+        }
+
+        return json_decode(curl_exec($ch),true);
+    }
+
+    // 🔒 Device check
+    $check = db("users?device_id=eq.$device");
+
+    if($check && count($check) > 0){
+        echo json_encode([
+            "status"=>"error",
+            "msg"=>"Device already used"
+        ]);
+        exit;
+    }
+
+    // ✅ Update user
+    db("users?telegram_id=eq.$user","PATCH",[
+        "verified"=>true,
+        "device_id"=>$device
+    ]);
+
     echo json_encode([
-        "status"=>"working",
-        "msg"=>"verify route reached"
+        "status"=>"success"
     ]);
     exit;
 }
