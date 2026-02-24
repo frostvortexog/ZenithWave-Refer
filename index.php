@@ -1,24 +1,27 @@
 <?php
 
-// ===== DEBUG (IMPORTANT) =====
-error_reporting(E_ALL);
-ini_set('display_errors', 1);
+<?php
 
-// ===== CORS =====
+// 🔥 REMOVE ALL ERRORS FROM OUTPUT
+error_reporting(0);
+ini_set('display_errors', 0);
+
+// 🔥 CLEAN OUTPUT BUFFER
+ob_start();
+
+// CORS
 header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Headers: Content-Type");
 header("Access-Control-Allow-Methods: POST, GET, OPTIONS");
 
-// Handle OPTIONS (CORS preflight)
 if($_SERVER['REQUEST_METHOD'] === 'OPTIONS'){
     http_response_code(200);
     exit;
 }
 
-// ===== VERIFY ROUTE =====
-if(strpos($_SERVER['REQUEST_URI'], 'verify') !== false)
-
 if(strpos($_SERVER['REQUEST_URI'], 'verify') !== false){
+
+    header("Content-Type: application/json");
 
     $input = json_decode(file_get_contents("php://input"), true);
 
@@ -57,10 +60,12 @@ if(strpos($_SERVER['REQUEST_URI'], 'verify') !== false){
             curl_setopt($ch,CURLOPT_POSTFIELDS,json_encode($data));
         }
 
-        return json_decode(curl_exec($ch),true);
+        $res = curl_exec($ch);
+
+        return json_decode($res,true);
     }
 
-    // 🔒 Device check
+    // 🔒 Check device
     $check = db("users?device_id=eq.$device");
 
     if($check && count($check) > 0){
@@ -71,7 +76,7 @@ if(strpos($_SERVER['REQUEST_URI'], 'verify') !== false){
         exit;
     }
 
-    // ✅ Update user
+    // ✅ Verify user
     db("users?telegram_id=eq.$user","PATCH",[
         "verified"=>true,
         "device_id"=>$device
