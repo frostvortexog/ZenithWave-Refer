@@ -93,7 +93,7 @@ def bot():
 
     # ---------------- START ----------------
     if text.startswith("/start"):
-    ref = None
+        ref = None
 
     if " " in text:
         ref = text.split()[1]
