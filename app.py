@@ -91,9 +91,9 @@ def bot():
             "verified": False
         })
 
-    # ---------------- START ----------------
-    if text.startswith("/start"):
-        ref = None
+# ---------------- MESSAGE HANDLER ----------------
+if text.startswith("/start"):
+    ref = None
 
     if " " in text:
         ref = text.split()[1]
@@ -104,9 +104,9 @@ def bot():
     if not check_join(user_id):
         keyboard = {
             "inline_keyboard": [
-                [{"text": "Join Channel 1", "url": "https://t.me/channel1"}],
-                [{"text": "Join Channel 2", "url": "https://t.me/channel2"}],
-                [{"text": "Join Channel 3", "url": "https://t.me/channel3"}]
+                [{"text": "Join Channel 1", "url": "https://t.me/ZenithWave_Shein"}],
+                [{"text": "Join Channel 2", "url": "https://t.me/ZenithWaveLoots"}],
+                [{"text": "Join Channel 3", "url": "https://t.me/ZenithWave_Shein_Backup"}]
             ]
         }
         send(user_id, "Join all channels first", keyboard)
@@ -121,63 +121,37 @@ def bot():
 
     send(user_id, "Complete verification", keyboard)
 
-if "callback_query" in data:
-    cq = data["callback_query"]
-    user_id = cq["from"]["id"]
-    data_cb = cq["data"]
 
-    # answer callback (IMPORTANT)
-    requests.post(
-        f"https://api.telegram.org/bot{BOT_TOKEN}/answerCallbackQuery",
-        json={"callback_query_id": cq["id"]}
-    )
+elif text == "📊 Stats":
+    u = sb("users", params=f"?user_id=eq.{user_id}")[0]
+    refs = sb("users", params=f"?referrer_id=eq.{user_id}")
+    send(user_id, f"Points: {u['points']}\nReferrals: {len(refs)}")
 
-    if data_cb == "check_verify":
-        user = sb("users", params=f"?user_id=eq.{user_id}")
 
-        if user and user[0]["verified"]:
-            send(user_id, "✅ Verification Successful!", user_menu())
-        else:
-            send(user_id, "❌ You are not verified yet. Click Verify Now.")
+elif text == "🔗 Referral Link":
+    send(user_id, f"https://t.me/YOUR_BOT?start={user_id}")
 
-    return "ok"
 
-    # ---------------- STATS ----------------
-    elif text == "📊 Stats":
-        u = sb("users", params=f"?user_id=eq.{user_id}")[0]
-        refs = sb("users", params=f"?referrer_id=eq.{user_id}")
-        send(user_id, f"Points: {u['points']}\nReferrals: {len(refs)}")
+elif text == "💸 Withdraw":
+    u = sb("users", params=f"?user_id=eq.{user_id}")[0]
+    setting = sb("settings")[0]
+    need = setting["withdraw_points"]
 
-    # ---------------- REF LINK ----------------
-    elif text == "🔗 Referral Link":
-        send(user_id, f"https://t.me/ZenithWave_Refer_Bot?start={user_id}")
+    if u["points"] < need:
+        send(user_id, "Not enough points")
+        return "ok"
 
-    # ---------------- WITHDRAW ----------------
-    elif text == "💸 Withdraw":
-        u = sb("users", params=f"?user_id=eq.{user_id}")[0]
-        setting = sb("settings")[0]
-        need = setting["withdraw_points"]
+    coupons = sb("coupons", params="?used=eq.false")
+    if not coupons:
+        send(user_id, "Coupons out of stock")
+        return "ok"
 
-        if u["points"] < need:
-            send(user_id, "Not enough points")
-            return "ok"
+    c = coupons[0]
 
-        coupons = sb("coupons", params="?used=eq.false")
-        if not coupons:
-            send(user_id, "Coupons out of stock")
-            return "ok"
+    sb("coupons", "patch", {"used": True}, f"?id=eq.{c['id']}")
+    sb("users", "patch", {"points": u["points"] - need}, f"?user_id=eq.{user_id}")
 
-        c = coupons[0]
-
-        sb("coupons", "patch", {"used": True}, f"?id=eq.{c['id']}")
-        sb("users", "patch", {"points": u["points"] - need}, f"?user_id=eq.{user_id}")
-
-        send(user_id, f"Coupon: {c['code']}")
-
-        sb("logs", "post", {
-            "user_id": user_id,
-            "coupon": c["code"]
-        })
+    send(user_id, f"Coupon: {c['code']}")
 
         for a in ADMINS:
             send(a, f"User {user_id} redeemed {c['code']}")
