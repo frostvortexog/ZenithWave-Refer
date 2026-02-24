@@ -16,7 +16,7 @@ button{padding:15px;background:#22c55e;border:none;border-radius:10px;}
 <script>
 function verify(){
 fetch("api.php?id=<?php echo $id;?>")
-.then(()=>window.location="https://t.me/YOUR_BOT");
+.then(()=>window.location="https://t.me/ZenithWave_Refer_Bot");
 }
 </script>
 </body>
