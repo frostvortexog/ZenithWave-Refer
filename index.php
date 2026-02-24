@@ -1,23 +1,22 @@
 <?php
 
-// 🔥 REMOVE ALL ERRORS FROM OUTPUT
-error_reporting(E_ALL);
-ini_set('display_errors', 1);
+// ===== BASIC SETUP =====
+error_reporting(0);
+ini_set('display_errors', 0);
 
-// 🔥 CLEAN OUTPUT BUFFER
-ob_start();
-
-// CORS
 header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Headers: Content-Type");
 header("Access-Control-Allow-Methods: POST, GET, OPTIONS");
 
 if($_SERVER['REQUEST_METHOD'] === 'OPTIONS'){
-    http_response_code(200);
     exit;
 }
 
-if(strpos($_SERVER['REQUEST_URI'], 'verify') !== false){
+// ===== VERIFY ROUTE =====
+if(
+    $_SERVER['REQUEST_METHOD'] === 'POST' &&
+    strpos($_SERVER['REQUEST_URI'], 'verify') !== false
+){
 
     header("Content-Type: application/json");
 
@@ -34,33 +33,6 @@ if(strpos($_SERVER['REQUEST_URI'], 'verify') !== false){
     if(!$user || !$device){
         echo json_encode(["status"=>"error","msg"=>"Missing data"]);
         exit;
-    }
-
-    $supa_url = getenv("SUPABASE_URL");
-    $supa_key = getenv("SUPABASE_KEY");
-
-    function db($endpoint,$method="GET",$data=null){
-        global $supa_url,$supa_key;
-
-        $ch = curl_init("$supa_url/rest/v1/$endpoint");
-        curl_setopt($ch,CURLOPT_RETURNTRANSFER,true);
-
-        $headers = [
-            "apikey: $supa_key",
-            "Authorization: Bearer $supa_key",
-            "Content-Type: application/json"
-        ];
-
-        curl_setopt($ch,CURLOPT_HTTPHEADER,$headers);
-
-        if($method!="GET"){
-            curl_setopt($ch,CURLOPT_CUSTOMREQUEST,$method);
-            curl_setopt($ch,CURLOPT_POSTFIELDS,json_encode($data));
-        }
-
-        $res = curl_exec($ch);
-
-        return json_decode($res,true);
     }
 
     // 🔒 Check device
@@ -80,9 +52,15 @@ if(strpos($_SERVER['REQUEST_URI'], 'verify') !== false){
         "device_id"=>$device
     ]);
 
-    echo json_encode([
-        "status"=>"success"
-    ]);
+    echo json_encode(["status"=>"success"]);
+    exit;
+}
+
+// ===== TELEGRAM UPDATE HANDLER =====
+$update = json_decode(file_get_contents("php://input"), true);
+
+if(!$update){
+    // Not a Telegram request → just exit
     exit;
 }
 
