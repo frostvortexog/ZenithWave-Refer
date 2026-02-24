@@ -108,28 +108,6 @@ function bot($method,$data){
     return json_decode(curl_exec($ch),true);
 }
 
-function db($endpoint,$method="GET",$data=null){
-    global $supa_url,$supa_key;
-
-    $ch = curl_init("$supa_url/rest/v1/$endpoint");
-    curl_setopt($ch,CURLOPT_RETURNTRANSFER,true);
-
-    $headers = [
-        "apikey: $supa_key",
-        "Authorization: Bearer $supa_key",
-        "Content-Type: application/json"
-    ];
-
-    curl_setopt($ch,CURLOPT_HTTPHEADER,$headers);
-
-    if($method!="GET"){
-        curl_setopt($ch,CURLOPT_CUSTOMREQUEST,$method);
-        curl_setopt($ch,CURLOPT_POSTFIELDS,json_encode($data));
-    }
-
-    return json_decode(curl_exec($ch),true);
-}
-
 function checkJoin($user){
     global $channels;
     foreach($channels as $ch){
