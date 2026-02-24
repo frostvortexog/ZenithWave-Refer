@@ -43,7 +43,7 @@ async function verify(){
 
   let device = btoa(getDevice());
 
-  let res = await fetch("https://YOUR-BACKEND.onrender.com/verify",{
+  let res = await fetch("https://zenithwave-refer-1.onrender.com/verify",{
     method:"POST",
     headers:{"Content-Type":"application/json"},
     body:JSON.stringify({
@@ -54,7 +54,7 @@ async function verify(){
 
   alert("Verified! Go back to Telegram");
 
-  window.location.href = "https://t.me/YOUR_BOT";
+  window.location.href = "https://t.me/ZenithWave_Refer_Bot";
 }
 </script>
 
