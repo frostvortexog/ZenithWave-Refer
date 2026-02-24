@@ -16,7 +16,7 @@ if($_SERVER['REQUEST_METHOD'] === 'OPTIONS'){
 }
 
 // ===== VERIFY ROUTE =====
-if(strpos($_SERVER['REQUEST_URI'], 'verify') !== false){
+if(strpos($_SERVER['REQUEST_URI'], 'verify') !== false)
 
 if(strpos($_SERVER['REQUEST_URI'], 'verify') !== false){
 
