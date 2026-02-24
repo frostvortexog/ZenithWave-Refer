@@ -7,10 +7,10 @@ $api = "https://api.telegram.org/bot$bot_token/";
 $supa_url = getenv("SUPABASE_URL");
 $supa_key = getenv("SUPABASE_KEY");
 
-$admin_id = 123456789; // CHANGE
+$admin_id = 8537079657; // CHANGE
 
-$channels = ["@channel1","@channel2","@channel3"];
-$verify_url = "https://your-web.vercel.app"; // CHANGE
+$channels = ["@ZenithWave_Shein","@ZenithWaveLoots","@ZenithWave_Shein_Backup"];
+$verify_url = "https://zenithwave-refer.onrender.com"; // CHANGE
 
 // ================= FUNCTIONS =================
 
