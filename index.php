@@ -48,20 +48,18 @@ if ($message) {
         }
 
         // FORCE JOIN
-        if (!isJoined($user_id)) {
-
-            bot("sendMessage", [
-                "chat_id" => $chat_id,
-                "text" => "🔒 Join all channels",
-                "reply_markup" => json_encode([
-                    "keyboard" => [
-                        [["text" => "✅ Joined All Channels"]]
-                    ],
-                    "resize_keyboard" => true
-                ])
-            ]);
-            exit;
-        }
+  bot("sendMessage", [
+    "chat_id" => $chat_id,
+    "text" => "🔒 Join all channels first",
+    "reply_markup" => json_encode([
+        "inline_keyboard" => [
+            [["text"=>"📢 Channel 1","url"=>"https://t.me/ZenithWave_Shein"]],
+            [["text"=>"📢 Channel 2","url"=>"https://t.me/ZenithWaveLoots"]],
+            [["text"=>"📢 Channel 3","url"=>"https://t.me/ZenithWave_Shein_Backup"]],
+            [["text"=>"✅ Joined All Channels","callback_data"=>"joined"]]
+        ]
+    ])
+]);
 
         // VERIFY
         bot("sendMessage", [
@@ -86,19 +84,6 @@ if ($message) {
             ]);
             exit;
         }
-
-  bot("sendMessage", [
-    "chat_id" => $chat_id,
-    "text" => "🔒 Join all channels first",
-    "reply_markup" => json_encode([
-        "inline_keyboard" => [
-            [["text"=>"📢 Channel 1","url"=>"https://t.me/ZenithWave_Shein"]],
-            [["text"=>"📢 Channel 2","url"=>"https://t.me/ZenithWaveLoots"]],
-            [["text"=>"📢 Channel 3","url"=>"https://t.me/ZenithWave_Shein_Backup"]],
-            [["text"=>"✅ Joined All Channels","callback_data"=>"joined"]]
-        ]
-    ])
-]);
         
         bot("sendMessage", [
             "chat_id" => $chat_id,
